@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from flask import Flask, request, send_file, render_template
 from google.cloud import texttospeech
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.sql import exists
+
+from names import name_to_audio
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///cache.db'
@@ -38,22 +39,6 @@ def hello_world():
     return 'Hello World!'
 
 
-def validate_number(number: str):
-    if not number:
-        return 'URL field number not set'
-    if not number.isdigit() or len(number) not in (10, 11):
-        return 'URL field number must be a 10- or 11-digit number'
-
-
-def phone_num_prettify(number: str):
-    if len(number) == 10:
-        area, first3, last4 = number[:3], number[3:6], number[6:10]
-    elif len(number) == 11:
-        area, first3, last4 = number[:4], number[4:7], number[7:11]
-
-    return '-'.join((area, first3, last4))
-
-
 def load_audio(tts, text):
     from model import Name
     existing: Name = Name.query.filter_by(text=text).first()
@@ -77,15 +62,15 @@ def text_to_speech(tts, text):
 def get_audio():
     global tts_info
     number = request.args.get('number', None)
-    error = validate_number(number)
-    if error:
-        return render_template('error.html', error=error)
     name = request.args.get('name', None)
-    to_audioify = name or phone_num_prettify(number)
-    audio = load_audio(tts_info, to_audioify)
+    try:
+        to_audio = name_to_audio(name, number)
+    except ValueError as ex:
+        return render_template('error.html', error=ex.message)
+    audio = load_audio(tts_info, to_audio)
     return send_file(io.BytesIO(audio),
-              attachment_filename='audio.mp3',
-              mimetype='audio/mpeg')
+                     attachment_filename='audio.mp3',
+                     mimetype='audio/mpeg')
 
 
 with app.app_context():
