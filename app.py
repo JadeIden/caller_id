@@ -6,7 +6,7 @@ from flask import Flask, request, send_file, render_template
 from google.cloud import texttospeech
 from flask_sqlalchemy import SQLAlchemy
 
-from names import validate_number, phone_num_prettify
+from names import name_to_audio
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///cache.db'
@@ -62,22 +62,15 @@ def text_to_speech(tts, text):
 def get_audio():
     global tts_info
     number = request.args.get('number', None)
-    error = validate_number(number)
-    if error:
-        return render_template('error.html', error=error)
-    pretty_num = phone_num_prettify(number)
     name = request.args.get('name', None)
-    if not name or name.lower() == "unknown":
-        name_num = f"Unknown caller {pretty_num}"
-    elif name.lower() == "blocked":
-        name_num = f"Blocked number {pretty_num}"
-    else:
-        name_num = name
-    to_audio = name_num
+    try:
+        to_audio = name_to_audio(name, number)
+    except ValueError as ex:
+        return render_template('error.html', error=ex.message)
     audio = load_audio(tts_info, to_audio)
     return send_file(io.BytesIO(audio),
-              attachment_filename='audio.mp3',
-              mimetype='audio/mpeg')
+                     attachment_filename='audio.mp3',
+                     mimetype='audio/mpeg')
 
 
 with app.app_context():
